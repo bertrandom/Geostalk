@@ -1,0 +1,221 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+    <title>Total Party Solution</title>
+    <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/3.1.1/build/cssreset/reset-min.css">
+    <script src="http://ajax.googleapis.com/ajax/libs/dojo/1.5/dojo/dojo.xd.js" type="text/javascript"
+        djConfig="isDebug: false, parseOnLoad: false"></script>
+    <script src="http://ajax.googleapis.com/ajax/libs/dojo/1.5/dijit/dijit.xd.js"></script>
+    <script type="text/javascript" src="http://tile.cloudmade.com/wml/latest/web-maps-lite.js"></script>
+</head>
+<body>
+
+    <!--
+    
+        Total Party Solution
+        Bertrand Fan <bertrand@fan.net>
+        
+        8/11/2010
+    
+    -->
+
+    <div id="map_wrapper" style="width: 100%; float:left;">
+        <div id="cm-example" style="height: 1px; position: relative;"></div>
+    </div>
+
+    <script>
+        
+        username = location.href.substr(location.href.lastIndexOf('/') + 1);
+        
+        if (username == '') {
+            
+            var username=prompt('Please enter a Flickr username:');
+            location.href = '/' + username;
+
+        }
+        
+        dojo.require("dojo.io.script");
+        
+        dojo.addOnLoad(function() {
+            
+            var height = 0;
+            if (typeof(window.innerHeight) == 'number') {
+                height = window.innerHeight;
+            } else if (document.documentElement && document.documentElement.clientHeight) {
+                height = document.documentElement.clientHeight;
+            } else if (document.body && document.body.clientHeight) {
+                height = document.body.clientHeight;
+            }
+            
+            dojo.style(dojo.byId('cm-example'), 'height', height + 'px');
+
+            var cloudmade = new CM.Tiles.CloudMade.Web({key: 'b2392c99bf56422c9550c42b20f78ee9', styleId: 21939});
+            map = new CM.Map('cm-example', cloudmade);
+            map.addControl(new CM.LargeMapControl());
+            map.addControl(new CM.ScaleControl());
+//            map.addControl(new CM.OverviewMapControl());
+            map.setCenter(new CM.LatLng(37.778313, -122.419281), 14);
+
+            var getArgs = {
+    			url: 'http://api.flickr.com/services/rest/',
+    			preventCache: true,
+    			content: {
+
+    			    method: 'flickr.urls.lookupUser',
+    			    api_key: '1b4be939da9cdcd1a631b55135972a87',
+    			    format: 'json',
+
+                    url: 'http://www.flickr.com/photos/' + username
+
+    			},
+    			callbackParamName: "jsoncallback"
+    		};
+
+            var deferred = dojo.io.script.get(getArgs);
+
+            deferred.addCallback(function(data) {
+
+                var getArgs = {
+        			url: 'http://api.flickr.com/services/rest/',
+        			preventCache: true,
+        			content: {
+    
+        			    method: 'flickr.photos.search',
+        			    api_key: '1b4be939da9cdcd1a631b55135972a87',
+        			    format: 'json',
+    
+        			    sort: 'date-taken-asc',
+        			    has_geo: 1,
+        			    
+        			    accuracy: 11,
+        			    
+        			    lat: 37.778313,
+        			    lon: -122.419281,
+        			    radius: 10,
+        			    radius_units: 'mi',
+        			    extras: 'date_taken, geo, url_sq, path_alias',
+        			    sort_date_taken_accurately: 1,
+    
+        			    user_id: data.user.id
+        			},
+        			callbackParamName: "jsoncallback"
+        		};
+        
+        		var deferred = dojo.io.script.get(getArgs);
+        		deferred.addCallback(function(photos) {
+        
+                    i = 0;
+                    
+                    markers = [];
+                    lines = [];
+                    
+                    last_lat = 0;
+                    last_long = 0;
+                    
+                    function displayPhoto() {
+                     
+                        if (i < photos.photos.photo.length) {
+        
+                            photo = photos.photos.photo[i];
+                        
+                            var CloudMadeIcon = new CM.Icon();
+                            CloudMadeIcon.image = photo.url_sq;
+                            CloudMadeIcon.iconSize = new CM.Size(75, 75);
+                            CloudMadeIcon.iconAnchor = new CM.Point(37.5, 37.5);
+                            
+                            var photoLocation = new CM.LatLng(photo.latitude, photo.longitude);
+                            var photoMarker = new CM.Marker(photoLocation, {
+                            	title: photo.title,
+                            	icon: CloudMadeIcon
+                            });
+                
+//                            map.setCenter(photoLocation, 15);
+        //                    map.panTo(photoLocation); 
+    
+                            photoMarker.flickrUrl = 'http://www.flickr.com/' + photo.pathalias + '/' + photo.id + '/';
+        
+                            CM.Event.addListener(photoMarker, 'click', function(latlng) {
+                                location.href = this.flickrUrl;
+                            });    
+        
+                            map.addOverlay(photoMarker);
+                                                
+                            photoMarker.hide();
+                            photoMarker.show();
+                                                
+                            markers[markers.length] = photoMarker;
+        
+                            if (last_lat != 0 && last_long != 0) {
+        
+                                var latlngs = [];
+                                latlngs[latlngs.length] = new CM.LatLng(last_lat, last_long);
+                                latlngs[latlngs.length] = new CM.LatLng(photo.latitude, photo.longitude);
+        
+                                var polyline = new CM.Polyline(latlngs, '#ffffff');
+                                
+                                map.addOverlay(polyline);
+        
+                                lines[lines.length] = polyline;
+        
+                            }                    
+                            
+                            last_lat = photo.latitude;
+                            last_long = photo.longitude;
+                            
+                            if (markers.length > 1) {
+                                
+                                for (i = 0; i < markers.length; i++) {
+                                    markers[i]._image.style.zIndex = 0;
+                                    
+                                }
+                                
+/*                                badMarker = markers.shift();
+                                  badMarker._image.style.zIndex = 0;*/
+        //                        badMarker.hide();
+                                   
+                            }
+                            
+/*                            if (lines.length > 2) {
+                                
+                                line = lines.shift();
+                                line.hide();
+                                   
+                            }*/
+                            
+                            i++;
+        
+                            window.setTimeout(displayPhoto, 700);
+                            
+                        }
+                        
+                    }            
+        
+                    if (photos.photos.photo.length > 0) {
+        
+                        displayPhoto();            
+                    
+                    } else {
+
+                        if (photos.photos.total == "0") {
+
+                            alert('No public photos found in San Francisco.');
+                            
+                        } else {
+
+                            alert('There was an error retrieving the photos from Flickr. Try refreshing.');
+                            
+                        }
+                     
+                        
+                    }
+        		    
+        		});
+
+            });
+            
+        });
+    </script>
+
+
+</body>
+</html>
